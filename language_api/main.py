@@ -1,16 +1,17 @@
 from datetime import datetime
 import logging
 import os
+from google.cloud import storage
 
 from flask import Flask, redirect, render_template, request
 
 from google.cloud import datastore
 from google.cloud import language_v1 as language
 
-
-
-
 app = Flask(__name__)
+
+# Configure this environment variable via app.yaml
+CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
 
 
 @app.route("/")
@@ -28,7 +29,7 @@ def homepage():
     return render_template("homepage.html", text_entities=text_entities)
 
 
-@app.route("/upload", methods=["GET", "POST"])
+@app.route("/upload-text", methods=["GET", "POST"])
 def upload_text():
     text = request.form["text"]
 
@@ -73,6 +74,32 @@ def upload_text():
     return redirect("/")
 
 
+@app.route('/upload-file', methods=['POST'])
+def upload_file():
+    """Process the uploaded file and upload it to Google Cloud Storage."""
+    uploaded_file = request.files.get('file')
+
+    if not uploaded_file:
+        return 'No file uploaded.', 400
+
+    # Create a Cloud Storage client.
+    gcs = storage.Client()
+
+    # Get the bucket that the file will be uploaded to.
+    bucket = gcs.get_bucket(CLOUD_STORAGE_BUCKET)
+
+    # Create a new blob and upload the file's content.
+    blob = bucket.blob(uploaded_file.filename)
+
+    blob.upload_from_string(
+        uploaded_file.read(),
+        content_type=uploaded_file.content_type
+    )
+
+    # The public URL can be used to directly access the uploaded file via HTTP.
+    return blob.public_url
+
+
 @app.errorhandler(500)
 def server_error(e):
     logging.exception("An error occurred during a request.")
@@ -85,6 +112,8 @@ def server_error(e):
         ),
         500,
     )
+
+
 def analyze_text_sentiment(text):
     client = language.LanguageServiceClient()
     document = language.Document(content=text, type_=language.Document.Type.PLAIN_TEXT)

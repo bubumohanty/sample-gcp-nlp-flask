@@ -27,7 +27,7 @@ def test_upload_text(app):
     @backoff.on_exception(backoff.expo, GatewayTimeout, max_time=120)
     def run_sample():
         return app.post(
-            '/upload',
+            '/upload-text',
             data={
                 'text': 'Test statement'
             }
