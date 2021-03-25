@@ -11,7 +11,7 @@ from google.cloud import language_v1 as language
 app = Flask(__name__)
 
 # Configure this environment variable via app.yaml
-CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
+CLOUD_STORAGE_BUCKET = 'staging.dbgee9nlp.appspot.com'
 
 
 @app.route("/")
@@ -97,7 +97,51 @@ def upload_file():
     )
 
     # The public URL can be used to directly access the uploaded file via HTTP.
-    return blob.public_url
+    # return blob.public_url
+
+    text = blob.download_as_text()
+
+    logging.info(text)
+
+    # Analyse sentiment using Sentiment API call
+    sentiment = analyze_text_sentiment(text)[0].get('sentiment score')
+
+    # Assign a label based on the score
+    overall_sentiment = 'unknown'
+    if sentiment > 0:
+        overall_sentiment = 'positive'
+    if sentiment < 0:
+        overall_sentiment = 'negative'
+    if sentiment == 0:
+        overall_sentiment = 'neutral'
+
+    # Create a Cloud Datastore client.
+    datastore_client = datastore.Client()
+
+    # Fetch the current date / time.
+    current_datetime = datetime.now()
+
+    # The kind for the new entity. This is so all 'Sentences' can be queried.
+    kind = "Sentences"
+
+    # Create the Cloud Datastore key for the new entity.
+    key = datastore_client.key(kind, 'sample_task')
+
+    # Alternative to above, the following would store a history of all previous requests as no key
+    # identifier is specified, only a 'kind'. Datastore automatically provisions numeric ids.
+    # key = datastore_client.key(kind)
+
+    # Construct the new entity using the key. Set dictionary values for entity
+    entity = datastore.Entity(key)
+    entity["text"] = text
+    entity["timestamp"] = current_datetime
+    entity["sentiment"] = overall_sentiment
+
+    # Save the new entity to Datastore.
+    datastore_client.put(entity)
+
+    # Redirect to the home page.
+    return redirect("/")
 
 
 @app.errorhandler(500)
